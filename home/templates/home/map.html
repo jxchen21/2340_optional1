@@ -56,22 +56,55 @@
         </div>
     </div>
 
-    <!-- Map Info Panel -->
+    <!-- Trending Movies Panel -->
     <div class="bg-light py-4">
         <div class="container">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-8">
+                    <h5 id="trending-title">
+                        {% if user_trending_movies %}
+                            Trending Movies in {{ user_location.city }}, {{ user_location.country }}
+                        {% else %}
+                            Select a region on the map to see trending movies
+                        {% endif %}
+                    </h5>
+                    <div id="trending-movies-list">
+                        {% if user_trending_movies %}
+                            <div class="row">
+                                {% for movie_popularity in user_trending_movies %}
+                                <div class="col-md-6 col-lg-4 mb-3">
+                                    <div class="card h-100">
+                                        {% if movie_popularity.movie.image %}
+                                        <img src="{{ movie_popularity.movie.image.url }}" class="card-img-top" style="height: 200px; object-fit: cover;" alt="{{ movie_popularity.movie.name }}">
+                                        {% endif %}
+                                        <div class="card-body">
+                                            <h6 class="card-title">{{ movie_popularity.movie.name }}</h6>
+                                            <p class="card-text">
+                                                <span class="badge bg-primary">{{ movie_popularity.purchase_count }} purchases</span>
+                                                <br>
+                                                <small class="text-muted">${{ movie_popularity.movie.price }}</small>
+                                            </p>
+                                            <a href="{% url 'movies.show' id=movie_popularity.movie.id %}" class="btn btn-sm btn-outline-primary">View Details</a>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-muted">Click on a region marker on the map to see trending movies in that area.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
                     <h5>How it works</h5>
                     <p class="text-muted">
                         This map shows popular movies based on purchase data in different locations.
-                        The darker areas indicate higher movie popularity in those regions.
+                        Click on region markers to see trending movies in that area.
                     </p>
-                </div>
-                <div class="col-md-6">
-                    <h5>Features</h5>
+                    <h6>Features</h6>
                     <ul class="text-muted">
                         <li>View local movie popularity</li>
-                        <li>Discover trending movies in your area</li>
+                        <li>Discover trending movies by region</li>
                         <li>Compare popularity across regions</li>
                         <li>Real-time location tracking</li>
                     </ul>
@@ -86,34 +119,52 @@
     let map;
     let userMarker;
     let userLocation = {% if user_location %}{{ user_location|safe }}{% else %}null{% endif %};
+    let regionalData = {{ regional_data|safe }};
+    let regionMarkers = [];
 
     function initMap() {
+        console.log('initMap called');
+        console.log('userLocation:', userLocation);
+        console.log('regionalData:', regionalData);
+        
+        // Check if map container exists
+        const mapElement = document.getElementById("map");
+        if (!mapElement) {
+            console.error('Map container not found!');
+            return;
+        }
+        
         // Default center (Tokyo, Japan - based on footer contact info)
         const defaultCenter = { lat: 35.6762, lng: 139.6503 };
 
         // Use user location if available, otherwise use default
         const center = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : defaultCenter;
 
-        map = new google.maps.Map(document.getElementById("map"), {
-            zoom: 12,
-            center: center,
-            mapTypeId: google.maps.MapTypeId.ROADMAP,
-            styles: [
-                {
-                    featureType: "poi",
-                    elementType: "labels",
-                    stylers: [{ visibility: "off" }]
-                }
-            ]
-        });
+        try {
+            map = new google.maps.Map(mapElement, {
+                zoom: 12,
+                center: center,
+                mapTypeId: google.maps.MapTypeId.ROADMAP,
+                styles: [
+                    {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            });
+            console.log('Map initialized successfully');
 
-        // Add user location marker if available
-        if (userLocation) {
-            addUserMarker(userLocation.lat, userLocation.lng, userLocation.city);
+            // Add user location marker if available
+            if (userLocation) {
+                addUserMarker(userLocation.lat, userLocation.lng, userLocation.city);
+            }
+
+            // Add regional movie popularity markers
+            addRegionalMarkers();
+        } catch (error) {
+            console.error('Error initializing map:', error);
         }
-
-        // Add some sample markers for demonstration
-        addSampleMarkers();
     }
 
     function addUserMarker(lat, lng, city) {
@@ -146,25 +197,77 @@
         });
     }
 
+    function addRegionalMarkers() {
+        console.log('addRegionalMarkers called');
+        console.log('regionalData:', regionalData);
+        
+        // Clear existing region markers
+        regionMarkers.forEach(marker => marker.setMap(null));
+        regionMarkers = [];
+
+        if (regionalData && regionalData.length > 0) {
+            console.log('Adding regional markers for', regionalData.length, 'regions');
+            regionalData.forEach((region, index) => {
+                const marker = new google.maps.Marker({
+                    position: { lat: region.latitude, lng: region.longitude },
+                    map: map,
+                    title: `${region.region_name}, ${region.country}`,
+                    icon: {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="14" cy="14" r="12" fill="#dc3545" stroke="#fff" stroke-width="2"/>
+                                <text x="14" y="18" text-anchor="middle" fill="white" font-size="10" font-weight="bold">🎬</text>
+                            </svg>
+                        `),
+                        scaledSize: new google.maps.Size(28, 28)
+                    }
+                });
+
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `
+                        <div class="p-2">
+                            <h6 class="mb-1">${region.region_name}, ${region.country}</h6>
+                            <p class="mb-2 text-muted">Click to see trending movies</p>
+                            <button class="btn btn-sm btn-primary" onclick="loadTrendingMovies('${region.region_name}', '${region.country}')">
+                                View Trending Movies
+                            </button>
+                        </div>
+                    `
+                });
+
+                marker.addListener("click", () => {
+                    infoWindow.open(map, marker);
+                    loadTrendingMovies(region.region_name, region.country);
+                });
+
+                regionMarkers.push(marker);
+            });
+        } else {
+            console.log('No regional data found, adding sample markers');
+            // Add some sample markers if no real data exists
+            addSampleMarkers();
+        }
+    }
+
     function addSampleMarkers() {
-        // Sample markers for demonstration
+        // Sample markers for demonstration when no real data exists
         const sampleLocations = [
-            { lat: 35.6762, lng: 139.6503, title: "Tokyo Station", popularity: "High" },
-            { lat: 35.6586, lng: 139.7454, title: "Shibuya", popularity: "Very High" },
-            { lat: 35.6762, lng: 139.6503, title: "Ginza", popularity: "Medium" },
-            { lat: 35.6586, lng: 139.7454, title: "Harajuku", popularity: "High" }
+            { lat: 35.6762, lng: 139.6503, title: "Tokyo", country: "Japan" },
+            { lat: 40.7128, lng: -74.0060, title: "New York", country: "USA" },
+            { lat: 51.5074, lng: -0.1278, title: "London", country: "UK" },
+            { lat: 48.8566, lng: 2.3522, title: "Paris", country: "France" }
         ];
 
         sampleLocations.forEach((location, index) => {
             const marker = new google.maps.Marker({
                 position: { lat: location.lat, lng: location.lng },
                 map: map,
-                title: location.title,
+                title: `${location.title}, ${location.country}`,
                 icon: {
                     url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
                         <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="12" r="10" fill="#28a745" stroke="#fff" stroke-width="2"/>
-                            <text x="12" y="16" text-anchor="middle" fill="white" font-size="10" font-weight="bold">${index + 1}</text>
+                            <circle cx="12" cy="12" r="10" fill="#6c757d" stroke="#fff" stroke-width="2"/>
+                            <text x="12" y="16" text-anchor="middle" fill="white" font-size="8" font-weight="bold">?</text>
                         </svg>
                     `),
                     scaledSize: new google.maps.Size(24, 24)
@@ -174,9 +277,9 @@
             const infoWindow = new google.maps.InfoWindow({
                 content: `
                     <div class="p-2">
-                        <h6 class="mb-1">${location.title}</h6>
-                        <p class="mb-0 text-muted">Movie Popularity: ${location.popularity}</p>
-                        <small class="text-success">Sample data for demonstration</small>
+                        <h6 class="mb-1">${location.title}, ${location.country}</h6>
+                        <p class="mb-2 text-muted">No movie data available yet</p>
+                        <small class="text-muted">Purchase movies to see trending data here</small>
                     </div>
                 `
             });
@@ -184,6 +287,8 @@
             marker.addListener("click", () => {
                 infoWindow.open(map, marker);
             });
+
+            regionMarkers.push(marker);
         });
     }
 
@@ -279,6 +384,77 @@
         });
     }
 
+    function loadTrendingMovies(regionName, country) {
+        // Show loading state
+        document.getElementById('trending-title').innerHTML = `Loading trending movies in ${regionName}...`;
+        document.getElementById('trending-movies-list').innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+        // Fetch trending movies for the region
+        fetch(`{% url 'home.region_trending_movies' %}?region=${encodeURIComponent(regionName)}&country=${encodeURIComponent(country)}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateTrendingMoviesDisplay(data);
+            } else {
+                showNoMoviesMessage(regionName, country, data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNoMoviesMessage(regionName, country, 'Error loading trending movies');
+        });
+    }
+
+    function updateTrendingMoviesDisplay(data) {
+        const titleElement = document.getElementById('trending-title');
+        const listElement = document.getElementById('trending-movies-list');
+
+        titleElement.innerHTML = `Trending Movies in ${data.region}, ${data.country}`;
+
+        if (data.trending_movies && data.trending_movies.length > 0) {
+            let moviesHTML = '<div class="row">';
+            data.trending_movies.forEach(movie => {
+                moviesHTML += `
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card h-100">
+                            ${movie.movie_image ? `<img src="${movie.movie_image}" class="card-img-top" style="height: 200px; object-fit: cover;" alt="${movie.movie_name}">` : ''}
+                            <div class="card-body">
+                                <h6 class="card-title">${movie.movie_name}</h6>
+                                <p class="card-text">
+                                    <span class="badge bg-primary">${movie.purchase_count} purchases</span>
+                                    <br>
+                                    <small class="text-muted">$${movie.movie_price}</small>
+                                </p>
+                                <a href="/movies/${movie.movie_id}/" class="btn btn-sm btn-outline-primary">View Details</a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            moviesHTML += '</div>';
+            listElement.innerHTML = moviesHTML;
+        } else {
+            showNoMoviesMessage(data.region, data.country, 'No trending movies found');
+        }
+    }
+
+    function showNoMoviesMessage(regionName, country, message) {
+        document.getElementById('trending-title').innerHTML = `Trending Movies in ${regionName}, ${country}`;
+        document.getElementById('trending-movies-list').innerHTML = `
+            <div class="alert alert-info" role="alert">
+                <h6 class="alert-heading">No trending movies found</h6>
+                <p class="mb-0">${message}</p>
+                <hr>
+                <p class="mb-0">Purchase movies to see trending data in this region.</p>
+            </div>
+        `;
+    }
+
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {
@@ -299,6 +475,16 @@
 
     // Initialize map when page loads
     window.initMap = initMap;
+    
+    // Test if Google Maps API is loaded
+    window.addEventListener('load', function() {
+        console.log('Page loaded, checking Google Maps API...');
+        if (typeof google !== 'undefined' && google.maps) {
+            console.log('Google Maps API is loaded');
+        } else {
+            console.error('Google Maps API is not loaded!');
+        }
+    });
 </script>
 
 <!-- Load Google Maps API -->
@@ -326,6 +512,8 @@
     #map {
         border: none;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        min-height: 400px;
+        background-color: #f0f0f0;
     }
 
     .card {

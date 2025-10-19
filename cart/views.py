@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from movies.models import Movie
+from movies.models import Movie, RegionalMoviePopularity
 from .utils import calculate_cart_total
 from .models import Order, Item
 from django.contrib.auth.decorators import login_required
@@ -46,6 +46,15 @@ def purchase(request):
         item.order = order
         item.quantity = cart[str(movie.id)]
         item.save()
+        
+        # Update regional popularity for each movie purchased
+        try:
+            user_profile = request.user.userprofile
+            RegionalMoviePopularity.update_regional_popularity(movie, user_profile)
+        except:
+            # If user doesn't have a profile or location data, skip
+            pass
+    
     request.session['cart'] = {}
     template_data = {}
     template_data['title'] = 'Purchase confirmation'

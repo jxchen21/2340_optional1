@@ -8,14 +8,24 @@
         <hr />
         <form method="POST">
           {% csrf_token %}
-          <p>
-            <label for="comment">Comment:</label>
-            <textarea name="comment" required
+          <div class="mb-3">
+            <label for="rating" class="form-label">Rating:</label>
+            <select name="rating" id="rating" class="form-select" required>
+              <option value="1" {% if template_data.review.rating == 1 %}selected{% endif %}>1 Star</option>
+              <option value="2" {% if template_data.review.rating == 2 %}selected{% endif %}>2 Stars</option>
+              <option value="3" {% if template_data.review.rating == 3 %}selected{% endif %}>3 Stars</option>
+              <option value="4" {% if template_data.review.rating == 4 %}selected{% endif %}>4 Stars</option>
+              <option value="5" {% if template_data.review.rating == 5 %}selected{% endif %}>5 Stars</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="comment" class="form-label">Comment:</label>
+            <textarea name="comment"
             class="form-control" id="comment">{{template_data.review.comment }}</textarea>
-          </p>
+          </div>
           <div class="text-start">
             <button type="submit"
-              class="btn bg-dark text-white">Edit Review
+              class="btn bg-dark text-white">Update Review
             </button>
           </div>
         </form>
